@@ -23,10 +23,10 @@ import writeLogAcc as wA
 from models.datasets import *
 import sys
 
-parser = argparse.ArgumentParser(description='PyTorch Places365 Training MDF Net')
+parser = argparse.ArgumentParser(description='PyTorch Places365 Training SSF Net')
 parser.add_argument('-r', '--data', type=str, default='../../datasets/Places365_Rescaled_Subsets',
                     help='path to dataset')
-parser.add_argument('--arch', '-a', metavar='ARCH', default='MDFNet')
+parser.add_argument('--arch', '-a', metavar='ARCH', default='SSFNet')
 parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
 parser.add_argument('--epochs', default=100, type=int, metavar='N',
@@ -302,14 +302,14 @@ def main():
             rescaled_datadir = 'RePL' + str(rescaled_set)
             arr_typesize_groups = [1]
             for typesize in arr_typesize_groups:
-                strmode = f'd4_MDFNet_groups_' + '_' + str(sizem) + '_' + str(
+                strmode = f'd4_SSFNet_groups_' + '_' + str(sizem) + '_' + str(
                     typesize)
                 pathout = './checkpoints/Places365_Rescaled_Subsets/' + rescaled_datadir + "/" + strmode
                 filenameLOG = pathout + '/' + strmode + '.txt'
                 if not os.path.exists(pathout):
                     os.makedirs(pathout)
                 # get model
-                model = build_MDFNet(rescaled_set, sizem, cifar=False, groups=typesize)
+                model = build_SSFNet(rescaled_set, sizem, cifar=False, groups=typesize)
                 model = model.to(device)
 
                 print(model)

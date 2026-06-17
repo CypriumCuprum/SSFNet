@@ -7,7 +7,7 @@ Created on Sat Oct 22 15:31:57 2022
 from torchsummary import summary
 from models.SSFNet import *
 
-model = build_MDFNet(num_classes=1000, width_multiplier=1.0,cifar=False,groups=1)
+model = build_SSFNet(num_classes=1000, width_multiplier=1.0,cifar=False,groups=1)
 
 model = model.cuda()
 print ("model")

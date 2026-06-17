@@ -135,4 +135,4 @@ dependencies:
       - ptflops==0.7.5
       - scipy==1.15.3
       - sympy==1.13.1
-prefix: /home/dongvk/miniconda3/envs/dong_mdfnet
+prefix: /home/dongvk/miniconda3/envs/dong_ssfnet

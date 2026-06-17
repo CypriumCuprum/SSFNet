@@ -110,7 +110,7 @@ def main():
     args.data = path_ImageNet
 
     
-    args.arch = 'Places365' + '_MDFNet_final'  
+    args.arch = 'Places365' + '_SSFNet_final'  
     #pathout = './checkpoints/' + strmode
     directory = "checkpoints/%s/"%(args.arch + '_' + args.action)
     if not os.path.exists(directory):
@@ -120,7 +120,7 @@ def main():
         print("=> using pre-trained model '{}'".format(args.arch))
         model = models.__dict__[args.arch](k_size=args.ksize, pretrained=True)
     else:            
-        model = build_MDFNet(num_classes=365, width_multiplier=1.0, cifar=False, groups=1)
+        model = build_SSFNet(num_classes=365, width_multiplier=1.0, cifar=False, groups=1)
             
     if args.gpu is not None:
         model = model.cuda(args.gpu)

@@ -7,10 +7,10 @@ from .SE_Attention import *
 import torch.nn.functional as F
 from .common import conv1x1_block, conv3x3_block, conv5x5_dw_dilation_block, conv3x3_dw_dilation_block, Classifier,conv1x1_group_block, conv7x7_dw_dilation_block
 
-class MDF(torch.nn.Module):  # defined for multiple dilation features (MDF)
+class SSF(torch.nn.Module):  # defined for multiple dilation features (SSF)
     """
     Based on multiple depthwise dilation features(MDDF)
-    MDFNet: Congregating multiple dilation features for image classification
+    SSFNet: Congregating multiple dilation features for image classification
     """
 
     def __init__(self,
@@ -64,7 +64,7 @@ class MDF(torch.nn.Module):  # defined for multiple dilation features (MDF)
         return x
 
 
-class MDFNet(torch.nn.Module):
+class SSFNet(torch.nn.Module):
     """
     """
 
@@ -95,7 +95,7 @@ class MDFNet(torch.nn.Module):
             for unit_id, unit_channels in enumerate(stage_channels):
                 stride = strides[stage_id] if unit_id == 0 else 1
                 stage.add_module("unit{}".format(unit_id + 1),
-                                 MDF(in_channels=in_channels, out_channels=unit_channels, stride=stride, groups=groups))
+                                 SSF(in_channels=in_channels, out_channels=unit_channels, stride=stride, groups=groups))
                 in_channels = unit_channels
             self.backbone.add_module("stage{}".format(stage_id + 1), stage)
         self.final_conv_channels = 1024
@@ -133,7 +133,7 @@ class MDFNet(torch.nn.Module):
         return x
 
 
-def build_MDFNet(num_classes, width_multiplier=1.0, cifar=False, groups=2):
+def build_SSFNet(num_classes, width_multiplier=1.0, cifar=False, groups=2):
     init_conv_channels = 32
     channels = [[64], [64, 128], [128, 256,256], [256, 512, 512], [512]]
 
@@ -151,7 +151,7 @@ def build_MDFNet(num_classes, width_multiplier=1.0, cifar=False, groups=2):
         channels = [[int(unit * width_multiplier) for unit in stage] for stage in channels]
         init_conv_channels = int(init_conv_channels * width_multiplier)
 
-    return MDFNet(num_classes=num_classes,
+    return SSFNet(num_classes=num_classes,
                   init_conv_channels=init_conv_channels,
                   init_conv_stride=init_conv_stride,
                   channels=channels,

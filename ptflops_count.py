@@ -10,7 +10,7 @@ import torch
 from ptflops import get_model_complexity_info
 
 with torch.cuda.device(0):
-    model = build_MDFNet(num_classes=100, width_multiplier=1.0, cifar=False, groups=1)
+    model = build_SSFNet(num_classes=100, width_multiplier=1.0, cifar=False, groups=1)
     macs, params = get_model_complexity_info(model, (3, 32, 32), as_strings=True,
     # macs, params = get_model_complexity_info(model, (3, 224, 224), as_strings=True,
                                              print_per_layer_stat=True, verbose=True, flops_units='M',

@@ -26,7 +26,7 @@ def get_args():
     """
     Parse the command line arguments.
     """
-    parser = argparse.ArgumentParser(description='MDFNet training script for DOGS and fine-grained datasets.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(description='SSFNet training script for DOGS and fine-grained datasets.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-r', '--data-root', type=str, default='../../datasets/StanfordDogs', help='Dataset root path.')
     parser.add_argument('-d', '--dataset', type=str, choices=['cifar10', 'cifar100', 'dogs'], default='dogs', help='Dataset name.')
     parser.add_argument('--download', action='store_true', help='Download the specified dataset before running the training.')
@@ -171,13 +171,13 @@ def main():
     for sizem in arr_size:
         arr_typesize_groups = [1]
         for typesize in arr_typesize_groups:                
-            strmode = 'MDFNet_groups_' + '_' + str(sizem) + '_' + str(typesize)
-            pathout = './checkpoints/StanfordDogs_MDFNet/' + strmode
+            strmode = 'SSFNet_groups_' + '_' + str(sizem) + '_' + str(typesize)
+            pathout = './checkpoints/StanfordDogs_SSFNet/' + strmode
             filenameLOG = pathout + '/' + strmode + '.txt'
             if not os.path.exists(pathout):
                 os.makedirs(pathout)
             # get model        
-            model = build_MDFNet(120, sizem,cifar=False,groups=typesize)
+            model = build_SSFNet(120, sizem,cifar=False,groups=typesize)
             model = model.to(device)
             
             print(model)
