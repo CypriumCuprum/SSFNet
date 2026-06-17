@@ -13,11 +13,17 @@ conda activate ssfnet
 ```
 
 ## Data Preparation
-About CIFAR, Places365, ImageNet: automatically download through torchvision\
-About Stanford Dogs: auto download (see file /models/datasets.py)
+About CIFAR, Places365, Stanford Dogs: automatically download with flag ```--download```\
+About ImageNet-1K, ImageNet-100, ReIN, and RePLs: Manual download (place under  ```../../datasets/```):
 
 ## Training
 ```bash
 python SSFNet_{dataset_name}.py
 # dataset_name: see in the root dir
+```
+
+## Model Evaluation
+To evaluate a trained model checkpoint instead of training from scratch, use the  -e  or  --evaluate  flag:
+```bash  
+python SSFNet_{dataset_name}.py -e
 ```
