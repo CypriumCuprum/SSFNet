@@ -13,7 +13,7 @@ conda activate ssfnet
 ```
 
 ## Data Preparation
-About CIFAR, Places365, ImageNet: automatically download through torchvision
+About CIFAR, Places365, ImageNet: automatically download through torchvision\
 About Stanford Dogs: auto download (see file /models/datasets.py)
 
 ## Training
