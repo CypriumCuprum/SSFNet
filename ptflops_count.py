@@ -5,7 +5,7 @@ Created on Fri Feb 10 17:25:35 2023
 @author: tuann
 """
 from torchsummary import summary
-from models.MDFNet import *
+from models.SSFNet import *
 import torch
 from ptflops import get_model_complexity_info
 

@@ -1,4 +1,4 @@
-name: mdfnet
+name: ssfnet
 channels:
   - defaults
   - nvidia

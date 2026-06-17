@@ -17,7 +17,7 @@ from models.datasets import *
 # from pathlib import Path
 # sys.path.append(str(Path('.').absolute().parent))
 
-from models.MDFNet import *
+from models.SSFNet import *
 import writeLogAcc as wA
 
 from ptflops import get_model_complexity_info

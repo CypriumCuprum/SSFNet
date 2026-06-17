@@ -16,7 +16,7 @@ import torch.utils.data as data
 import torch.utils.data.distributed
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
-from models.MDFNet import *
+from models.SSFNet import *
 from ptflops import get_model_complexity_info
 from models.cross_entropy import LabelSmoothingCrossEntropy
 import writeLogAcc as wA

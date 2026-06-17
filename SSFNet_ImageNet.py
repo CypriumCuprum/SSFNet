@@ -28,15 +28,19 @@ import torch.utils.data
 import torch.utils.data.distributed
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
-from models.MDFNet import *
+from models.SSFNet import *
 import writeLogAcc as wA
 from models.cross_entropy import LabelSmoothingCrossEntropy
+import torchvision
+
+cudnn.benchmark = True 
 
 from ptflops import get_model_complexity_info
 
-path_ReIN = '../../datasets/ImageNet_Rescaled_Subsets'
+path_ImageNet = '../../datasets/imagenet1k'
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
+#parser.add_argument('-r', '--data', type=str, default='../../datasets/ImageNet', help='path to dataset')
 parser.add_argument('-r', '--data', type=str, default='', help='path to dataset')
 parser.add_argument('-j', '--workers', default=16, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
@@ -44,7 +48,8 @@ parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch-size', default=128, type=int,
+#parser.add_argument('-b', '--batch-size', default=256, type=int,
+parser.add_argument('-b', '--batch-size', default=256, type=int,
                     metavar='N', help='mini-batch size (default: 256)')
 parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
                     metavar='LR', help='initial learning rate')
@@ -52,7 +57,7 @@ parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum')
 parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)')
-parser.add_argument('--print-freq', '-p', default=100, type=int,
+parser.add_argument('--print-freq', '-p', default=5, type=int,
                     metavar='N', help='print frequency (default: 10)')
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
@@ -104,192 +109,182 @@ def main():
                                 world_size=args.world_size)
     torch.autograd.set_detect_anomaly(True)
     # create model
-    #arr_typesize = ['small','large']
-    #arr_rescaled_set = [30,50,100,150,200]
-    arr_rescaled_set = [30,50,100]
-    for rescaled_set in arr_rescaled_set:
-        args.data = path_ReIN + '/ReIN' + str(rescaled_set)
-        #for typesize in arr_typesize:
-        
-        args.arch = 'removeinit_ReIN' + str(rescaled_set) + '_MDFNet_final_' + '_No_ColorJitter_SE_128_multiGPU'  
-        #pathout = './checkpoints/' + strmode
-        directory = "checkpoints/%s/"%(args.arch + '_' + args.action)
-        if not os.path.exists(directory):
-            os.makedirs(directory)
-        filenameLOG = "./checkpoints/%s/"%(args.arch + '_' + args.action) + '/' + args.arch + '.txt'
-        if args.pretrained:
-            print("=> using pre-trained model '{}'".format(args.arch))
-            model = models.__dict__[args.arch](k_size=args.ksize, pretrained=True)
-        else:            
-            model = build_MDFNet(num_classes=rescaled_set, width_multiplier=1.0, cifar=False, groups=1)
-                
-        if args.gpu is not None:
-            model = model.cuda(args.gpu)
-        elif args.distributed:
-            model.cuda()
-            model = torch.nn.parallel.DistributedDataParallel(model)
-        else:
-            model = torch.nn.DataParallel(model).cuda()
+    args.data = path_ImageNet
+
     
-        print(model)
-        
-        # get the number of models parameters
-        print('Number of models parameters: {}'.format(
-            sum([p.data.nelement() for p in model.parameters()])))
-
-        file_log_model = directory + '_modelLog.txt'
-        with open(file_log_model, 'w') as f:
-            f.write(str(model))
-            f.write('\n')
-            f.write('Number of model parameters: {}'.format(
-            sum([p.data.nelement() for p in model.parameters()])))
-            f.write('\n')
-        
-            macs, params = get_model_complexity_info(model, (3, 224, 224), as_strings=True,
-                                            print_per_layer_stat=True, verbose=True, flops_units='GMac',
-                                            param_units='M')
-            # print_per_layer_stat=True, verbose=True,param_units='M')
-
-            # , flops_units='GMac')
-            macs1 = macs.split()
-            strmacs1 = str(float(macs1[0]) / 2) + ' ' + macs1[1][0]
+    args.arch = 'ImageNet100' + '_MDFNet_final_' + '_No_ColorJitter_SE_128_multiGPU'  
+    #pathout = './checkpoints/' + strmode
+    directory = "checkpoints/%s/"%(args.arch + '_' + args.action)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    filenameLOG = "./checkpoints/%s/"%(args.arch + '_' + args.action) + '/' + args.arch + '.txt'
+    if args.pretrained:
+        print("=> using pre-trained model '{}'".format(args.arch))
+        model = models.__dict__[args.arch](k_size=args.ksize, pretrained=True)
+    else:            
+        model = build_MDFNet(num_classes=1000, width_multiplier=1.0, cifar=False, groups=1)
             
-            f.write('{:<30}  {:<8}'.format('Floating-point operations (FLOPs): ', strmacs1))
-            f.write('\n')
-            f.write('{:<30}  {:<8}'.format('Number of parameters using ptflops: ', params))
-            f.write('\n')
+    if args.gpu is not None:
+        model = model.cuda(args.gpu)
+    elif args.distributed:
+        model.cuda()
+        model = torch.nn.parallel.DistributedDataParallel(model)
+    else:
+        model = torch.nn.DataParallel(model).cuda()
+
+    print(model)
     
-        # define loss function (criterion) and optimizer
-        train_loss_fn = LabelSmoothingCrossEntropy(smoothing=0.1).cuda(args.gpu)
-        criterion = nn.CrossEntropyLoss().cuda(args.gpu)                   
-        optimizer = torch.optim.SGD(model.parameters(), args.lr,
-                                    momentum=args.momentum,
-                                    weight_decay=args.weight_decay)
+    # get the number of models parameters
+    print('Number of models parameters: {}'.format(
+        sum([p.data.nelement() for p in model.parameters()])))
+
+    file_log_model = directory + '_modelLog.txt'
+    with open(file_log_model, 'w') as f:
+        f.write(str(model))
+        f.write('\n')
+        f.write('Number of model parameters: {}'.format(
+        sum([p.data.nelement() for p in model.parameters()])))
+        f.write('\n')
     
-        # optionally resume from a checkpoint
-        if args.evaluate:
-            pathcheckpoint = "./checkpoints/%s/"%(args.arch + '_' + args.action) + "model_best.pth.tar"
-            if os.path.isfile(pathcheckpoint):
-                print("=> loading checkpoint '{}'".format(pathcheckpoint))
-                checkpoint = torch.load(pathcheckpoint)
-                model.load_state_dict(checkpoint['state_dict'])
-                #optimizer.load_state_dict(checkpoint['optimizer'])
-                del checkpoint
-            else:
-                print("=> no checkpoint found at '{}'".format(pathcheckpoint))
-                return
-        if args.resume:
-            path_resume = "./checkpoints/%s/"%(args.arch + '_' + args.action) + "model_best.pth.tar"
-            if os.path.isfile(path_resume):
-                print("--------------------------------")
-                print("=> loading checkpoint '{}'".format(path_resume))
-                checkpoint = torch.load(path_resume)
-                args.start_epoch = checkpoint['epoch']
-                best_prec1 = checkpoint['best_prec1']
-                model.load_state_dict(checkpoint['state_dict'])
-                optimizer.load_state_dict(checkpoint['optimizer'])
-                print("=> loaded checkpoint '{}' (epoch {})"
-                      .format(args.resume, checkpoint['epoch']))
-                del checkpoint
-            else:
-                print("=> no checkpoint found at '{}'".format(args.resume))
+        macs, params = get_model_complexity_info(model, (3, 224, 224), as_strings=True,
+                                        print_per_layer_stat=True, verbose=True, flops_units='GMac',
+                                        param_units='M')
+        # print_per_layer_stat=True, verbose=True,param_units='M')
+
+        # , flops_units='GMac')
+        macs1 = macs.split()
+        strmacs1 = str(float(macs1[0]) / 2) + ' ' + macs1[1][0]
+        
+        f.write('{:<30}  {:<8}'.format('Floating-point operations (FLOPs): ', strmacs1))
+        f.write('\n')
+        f.write('{:<30}  {:<8}'.format('Number of parameters using ptflops: ', params))
+        f.write('\n')
+
+    # define loss function (criterion) and optimizer
+    train_loss_fn = LabelSmoothingCrossEntropy(smoothing=0.1).cuda(args.gpu)
+    criterion = nn.CrossEntropyLoss().cuda(args.gpu)                   
+    optimizer = torch.optim.SGD(model.parameters(), args.lr,
+                                momentum=args.momentum,
+                                weight_decay=args.weight_decay)
+
+    # optionally resume from a checkpoint
+    if args.evaluate:
+        pathcheckpoint = "./checkpoints/%s/"%(args.arch + '_' + args.action) + "model_best.pth.tar"
+        if os.path.isfile(pathcheckpoint):
+            print("=> loading checkpoint '{}'".format(pathcheckpoint))
+            checkpoint = torch.load(pathcheckpoint)
+            model.load_state_dict(checkpoint['state_dict'])
+            #optimizer.load_state_dict(checkpoint['optimizer'])
+            del checkpoint
         else:
-            best_prec1 = 0
-        cudnn.benchmark = True
-    
-        # Data loading code
-        traindir = os.path.join(args.data, 'train')
-        valdir = os.path.join(args.data, 'val')
-        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    
-        train_dataset = datasets.ImageFolder(
-            traindir,
-            transforms.Compose([
-                transforms.RandomResizedCrop(224),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                normalize,
-            ])
-            )
-    
-        if args.distributed:
-            train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
-        else:
-            train_sampler = None
-    
-        train_loader = torch.utils.data.DataLoader(
-            train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
-            num_workers=args.workers, pin_memory=True, sampler=train_sampler)
-    
-        val_loader = torch.utils.data.DataLoader(
-            datasets.ImageFolder(valdir, transforms.Compose([
-                transforms.Resize(256),
-                transforms.CenterCrop(224),
-                transforms.ToTensor(),
-                normalize,
-            ])),
-            batch_size=args.batch_size, shuffle=False,
-            num_workers=args.workers, pin_memory=True)  
-        if args.evaluate:
-            m = time.time()
-            _, _ =validate(val_loader, model, criterion)
-            n = time.time()
-            print((n-m)/3600)
+            print("=> no checkpoint found at '{}'".format(pathcheckpoint))
             return
-    
-        Loss_plot = {}
-        train_prec1_plot = {}
-        train_prec5_plot = {}
-        val_prec1_plot = {}
-        val_prec5_plot = {}
-        epoch_max = None
-        #best_prec1 = 0
-        for epoch in range(args.start_epoch, args.epochs):
-            start_time = time.time()
-            if args.distributed:
-                train_sampler.set_epoch(epoch)
-            adjust_learning_rate(optimizer, epoch)
-    
-            # train for one epoch
-            # train(train_loader, model, criterion, optimizer, epoch)
-            #loss_temp, train_prec1_temp, train_prec5_temp = train(train_loader, model, criterion, optimizer, epoch)
-            loss_temp, train_prec1_temp, train_prec5_temp = train(train_loader, model, train_loss_fn, optimizer, epoch)
-            
-            Loss_plot[epoch] = loss_temp
-            train_prec1_plot[epoch] = train_prec1_temp
-            train_prec5_plot[epoch] = train_prec5_temp
-    
-            # evaluate on validation set
-            # prec1 = validate(val_loader, model, criterion)
-            prec1, prec5 = validate(val_loader, model, criterion)
-            val_prec1_plot[epoch] = prec1
-            val_prec5_plot[epoch] = prec5
-    
-            # remember best prec@1 and save checkpoint
-            is_best = prec1 > best_prec1
-            best_prec1 = max(prec1, best_prec1)
-            save_checkpoint({
-                'epoch': epoch + 1,
-                'arch': args.arch,
-                'state_dict': model.state_dict(),
-                'best_prec1': best_prec1,
-                'optimizer' : optimizer.state_dict(),
-            }, is_best)
-            
+    if args.resume:
+        path_resume = "./checkpoints/%s/"%(args.arch + '_' + args.action) + "checkpoint.pth.tar"
+        if os.path.isfile(path_resume):
+            print("--------------------------------")
+            print("=> loading checkpoint '{}'".format(path_resume))
+            checkpoint = torch.load(path_resume)
+            args.start_epoch = checkpoint['epoch']
+            best_prec1 = checkpoint['best_prec1']
+            model.load_state_dict(checkpoint['state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer'])
+            print("=> loaded checkpoint '{}' (epoch {})"
+                    .format(args.resume, checkpoint['epoch']))
+            del checkpoint
+        else:
+            print("=> no checkpoint found at '{}'".format(args.resume))
+    else:
+        best_prec1 = 0
+    cudnn.benchmark = True
 
-            data_save(directory + 'Loss_plot.txt', Loss_plot)
-            data_save(directory + 'train_prec1.txt', train_prec1_plot)
-            data_save(directory + 'train_prec5.txt', train_prec5_plot)
-            data_save(directory + 'val_prec1.txt', val_prec1_plot)
-            data_save(directory + 'val_prec5.txt', val_prec5_plot)
-            
-            line = 'Epoch {}/{} summary: loss_train={:.5f}, acc_train={:.2f}%, loss_val={:.2f}, acc_val={:.2f}% (best: {:.2f}% @ epoch {})'.format(epoch, args.epochs, loss_temp, train_prec1_temp, 0, prec1, best_prec1, epoch_max)
-            wA.writeLogAcc(filenameLOG,line)
-            end_time = time.time()
-            time_value = (end_time - start_time) / 3600
-            print("-" * 80)
-            print(time_value)
-            print("-" * 80)
+    # Data loading code
+    traindir = os.path.join(args.data, 'train')
+    valdir = os.path.join(args.data, 'val')
+    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+
+
+    transforms_train =  transforms.Compose([
+        transforms.RandomResizedCrop(224),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        normalize,
+    ])
+
+    transforms_val = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            normalize,
+        ])
+
+    dataset_class_train = torchvision.datasets.ImageNet
+    dataset_class_val = torchvision.datasets.ImageNet
+    dataset_train = dataset_class_train(root=path_ImageNet, split="train", transform=transforms_train)
+    dataset_val = dataset_class_val(root=path_ImageNet, split="val", transform=transforms_val)
+
+        
+    train_loader = torch.utils.data.DataLoader( dataset_train, batch_size=args.batch_size, shuffle=True, num_workers=args.workers, pin_memory=True)
+    val_loader = torch.utils.data.DataLoader(dataset_val, batch_size=args.batch_size, shuffle=False, num_workers=args.workers, pin_memory=True)      
+    
+    if args.evaluate:
+        m = time.time()
+        _, _ =validate(val_loader, model, criterion)
+        n = time.time()
+        print((n-m)/3600)
+        return
+
+    Loss_plot = {}
+    train_prec1_plot = {}
+    train_prec5_plot = {}
+    val_prec1_plot = {}
+    val_prec5_plot = {}
+    epoch_max = None
+    #best_prec1 = 0
+    for epoch in range(args.start_epoch, args.epochs):
+        start_time = time.time()
+        adjust_learning_rate(optimizer, epoch)
+
+        # train for one epoch
+        # train(train_loader, model, criterion, optimizer, epoch)
+        #loss_temp, train_prec1_temp, train_prec5_temp = train(train_loader, model, criterion, optimizer, epoch)
+        loss_temp, train_prec1_temp, train_prec5_temp = train(train_loader, model, train_loss_fn, optimizer, epoch)
+        
+        Loss_plot[epoch] = loss_temp
+        train_prec1_plot[epoch] = train_prec1_temp
+        train_prec5_plot[epoch] = train_prec5_temp
+
+        # evaluate on validation set
+        # prec1 = validate(val_loader, model, criterion)
+        prec1, prec5 = validate(val_loader, model, criterion)
+        val_prec1_plot[epoch] = prec1
+        val_prec5_plot[epoch] = prec5
+
+        # remember best prec@1 and save checkpoint
+        is_best = prec1 > best_prec1
+        best_prec1 = max(prec1, best_prec1)
+        save_checkpoint({
+            'epoch': epoch + 1,
+            'arch': args.arch,
+            'state_dict': model.state_dict(),
+            'best_prec1': best_prec1,
+            'optimizer' : optimizer.state_dict(),
+        }, is_best)
+        
+        # 将Loss,train_prec1,train_prec5,val_prec1,val_prec5用.txt的文件存起来
+        data_save(directory + 'Loss_plot.txt', Loss_plot)
+        data_save(directory + 'train_prec1.txt', train_prec1_plot)
+        data_save(directory + 'train_prec5.txt', train_prec5_plot)
+        data_save(directory + 'val_prec1.txt', val_prec1_plot)
+        data_save(directory + 'val_prec5.txt', val_prec5_plot)
+        
+        line = 'Epoch {}/{} summary: loss_train={:.5f}, acc_train={:.2f}%, loss_val={:.2f}, acc_val={:.2f}% (best: {:.2f}% @ epoch {})'.format(epoch, args.epochs, loss_temp, train_prec1_temp, 0, prec1, best_prec1, epoch_max)
+        wA.writeLogAcc(filenameLOG,line)
+        end_time = time.time()
+        time_value = (end_time - start_time) / 3600
+        print("-" * 80)
+        print(time_value)
+        print("-" * 80)
 
 
 def train(train_loader, model, criterion, optimizer, epoch):

@@ -3,7 +3,7 @@
 import argparse
 import sys
 import os
-# import inspect
+#import inspect
 
 import torch
 import torch.nn
@@ -12,36 +12,30 @@ import torch.optim.lr_scheduler
 import torch.utils.data
 import torchvision.transforms
 import torchvision.datasets
-from models.datasets import *
-from models.cross_entropy import LabelSmoothingCrossEntropy
-# from pathlib import Path
-# sys.path.append(str(Path('.').absolute().parent))
 
-from models.MDFNet import *
+#from pathlib import Path
+#sys.path.append(str(Path('.').absolute().parent))
+from models.datasets import *
+from models.SSFNet import *
+from models.cross_entropy import LabelSmoothingCrossEntropy
 import writeLogAcc as wA
 
 from ptflops import get_model_complexity_info
-
 
 def get_args():
     """
     Parse the command line arguments.
     """
-    parser = argparse.ArgumentParser(description='MDFNet training script for CIFAR and fine-grained datasets.',
-                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-r', '--data-root', type=str, default='../../datasets', help='Dataset root path.')
-    parser.add_argument('-d', '--dataset', type=str, choices=['cifar10', 'cifar100', 'dogs'], default='cifar100',
-                        help='Dataset name.')
-    parser.add_argument('--download', action='store_true',
-                        help='Download the specified dataset before running the training.')
-    parser.add_argument('-a', '--architecture', type=str, default='mobilenetv1_w1', help='Model architecture name.')
+    parser = argparse.ArgumentParser(description='MDFNet training script for DOGS and fine-grained datasets.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('-r', '--data-root', type=str, default='../../datasets/StanfordDogs', help='Dataset root path.')
+    parser.add_argument('-d', '--dataset', type=str, choices=['cifar10', 'cifar100', 'dogs'], default='dogs', help='Dataset name.')
+    parser.add_argument('--download', action='store_true', help='Download the specified dataset before running the training.')
     parser.add_argument('-g', '--gpu-id', default=1, type=int, help='ID of the GPU to use. Set to -1 to use CPU.')
     parser.add_argument('-j', '--workers', default=4, type=int, help='Number of data loading workers.')
-    parser.add_argument('-b', '--batch-size', default=128, type=int, help='Batch size.')
+    parser.add_argument('-b', '--batch-size', default=64, type=int, help='Batch size.')        
     parser.add_argument('-e', '--epochs', default=200, type=int, help='Number of total epochs to run.')
     parser.add_argument('-l', '--learning-rate', default=0.1, type=float, help='Initial learning rate.')
-    parser.add_argument('-s', '--schedule', nargs='+', default=[100, 150, 180], type=int,
-                        help='Learning rate schedule (epochs after which the learning rate should be dropped).')
+    parser.add_argument('-s', '--schedule', nargs='+', default=[100, 150, 180], type=int, help='Learning rate schedule (epochs after which the learning rate should be dropped).')    
     parser.add_argument('-m', '--momentum', default=0.9, type=float, help='SGD momentum.')
     parser.add_argument('-w', '--weight-decay', default=1e-4, type=float, help='SGD weight decay.')
     return parser.parse_args()
@@ -55,7 +49,7 @@ def get_device(args):
         return torch.device('cuda:{}'.format(args.gpu_id))
     else:
         return torch.device('cpu')
-
+    
 
 def get_data_loader(args, train):
     """
@@ -73,13 +67,13 @@ def get_data_loader(args, train):
             transform = torchvision.transforms.Compose([
                 torchvision.transforms.ToTensor(),
             ])
-
+    
         # cifar10 vs. cifar100
         if args.dataset == 'cifar10':
             dataset_class = torchvision.datasets.CIFAR10
         else:
             dataset_class = torchvision.datasets.CIFAR100
-
+            
     elif args.dataset in ('dogs',):
         # select transforms based on train/val
         if train:
@@ -96,20 +90,20 @@ def get_data_loader(args, train):
                 torchvision.transforms.CenterCrop(224),
                 torchvision.transforms.ToTensor()
             ])
-
+    
+        #dataset_class = models.datasets.StanfordDogs
         dataset_class = StanfordDogs
-
+    
     else:
         raise NotImplementedError('Can\'t determine data loader for dataset \'{}\''.format(args.dataset))
-
+    
     # trigger download only once
     if args.download:
         dataset_class(root=args.data_root, train=train, download=True, transform=transform)
 
     # instantiate dataset class and create data loader from it
     dataset = dataset_class(root=args.data_root, train=train, download=False, transform=transform)
-    return torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True if train else False,
-                                       num_workers=args.workers)
+    return torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True if train else False, num_workers=args.workers)    
 
 
 def calculate_accuracy(output, target):
@@ -132,7 +126,7 @@ def run_epoch(train, data_loader, model, criterion, optimizer, n_epoch, args, de
     else:
         model.eval()
         torch.set_grad_enabled(False)
-
+    
     batch_count = len(data_loader)
     losses = []
     accs = []
@@ -141,11 +135,7 @@ def run_epoch(train, data_loader, model, criterion, optimizer, n_epoch, args, de
         target = target.to(device)
 
         output = model(images)
-        loss = criterion(output, target)
-
-        # # IMPORTANT FOR BSConv-S
-        # if hasattr(model, 'reg_loss'):
-        #     loss += model.reg_loss(alpha=args.alpha)
+        loss = criterion(output, target)        
 
         # record loss and measure accuracy
         loss_item = loss.item()
@@ -158,14 +148,12 @@ def run_epoch(train, data_loader, model, criterion, optimizer, n_epoch, args, de
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
+    
         if (n_batch % 10) == 0:
-            print('[{}]  epoch {}/{},  batch {}/{},  loss_{}={:.5f},  acc_{}={:.2f}%'.format(
-                'train' if train else ' val ', n_epoch + 1, args.epochs, n_batch + 1, batch_count,
-                "train" if train else "val", loss_item, "train" if train else "val", 100.0 * acc))
-
+            print('[{}]  epoch {}/{},  batch {}/{},  loss_{}={:.5f},  acc_{}={:.2f}%'.format('train' if train else ' val ', n_epoch + 1, args.epochs, n_batch + 1, batch_count, "train" if train else "val", loss_item, "train" if train else "val", 100.0 * acc))
+    
     return (sum(losses) / len(losses), sum(accs) / len(accs))
-
+            
 
 def main():
     """
@@ -176,28 +164,26 @@ def main():
     args.gpu_id = 0
     device = get_device(args)
     print('Using device {}'.format(device))
-
+    
     # print model with parameter and FLOPs counts    
-    torch.autograd.set_detect_anomaly(True)
-    arr_size = [1.0]
+    torch.autograd.set_detect_anomaly(True)     
+    arr_size = [1]
     for sizem in arr_size:
-        # arr_typesize_groups = [2,1,4]
         arr_typesize_groups = [1]
-        for typesize in arr_typesize_groups:
+        for typesize in arr_typesize_groups:                
             strmode = 'MDFNet_groups_' + '_' + str(sizem) + '_' + str(typesize)
-            pathout = './checkpoints/CIFAR100_MDFNet/' + strmode
+            pathout = './checkpoints/StanfordDogs_MDFNet/' + strmode
             filenameLOG = pathout + '/' + strmode + '.txt'
             if not os.path.exists(pathout):
                 os.makedirs(pathout)
-            # get model
-
-            model = build_MDFNet(100, sizem, cifar=True, groups=typesize)
+            # get model        
+            model = build_MDFNet(120, sizem,cifar=False,groups=typesize)
             model = model.to(device)
-
+            
             print(model)
-
+            
             print('Number of model parameters: {}'.format(
-                sum([p.data.nelement() for p in model.parameters()])))
+            sum([p.data.nelement() for p in model.parameters()])))
             
             file_log_model = pathout + '/' + strmode + '_modelLog.txt'
             with open(file_log_model, 'w') as f:
@@ -207,7 +193,7 @@ def main():
                 sum([p.data.nelement() for p in model.parameters()])))
                 f.write('\n')
             
-                macs, params = get_model_complexity_info(model, (3, 32, 32), as_strings=True,
+                macs, params = get_model_complexity_info(model, (3, 224, 224), as_strings=True,
                                                 print_per_layer_stat=True, verbose=True, flops_units='GMac',
                                                 param_units='M')
                 # print_per_layer_stat=True, verbose=True,param_units='M')
@@ -220,54 +206,47 @@ def main():
                 f.write('\n')
                 f.write('{:<30}  {:<8}'.format('Number of parameters using ptflops: ', params))
                 f.write('\n')
-            
+        
             # define loss function and optimizer
             train_loss_fn = LabelSmoothingCrossEntropy(smoothing=0.1).to(device)
+            #validate_loss_fn = nn.CrossEntropyLoss().to(device)
             criterion = torch.nn.CrossEntropyLoss().to(device)
-            optimizer = torch.optim.SGD(params=model.parameters(), lr=args.learning_rate, momentum=args.momentum,
-                                        weight_decay=args.weight_decay)
+            optimizer = torch.optim.SGD(params=model.parameters(), lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay)
             scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer=optimizer, milestones=args.schedule, gamma=0.1)
-
+        
             # get train and val data loaders
             train_loader = get_data_loader(args=args, train=True)
             val_loader = get_data_loader(args=args, train=False)
-
+        
             # for each epoch...
             acc_val_max = None
             acc_val_argmax = None
             for n_epoch in range(args.epochs):
                 current_learning_rate = optimizer.param_groups[0]['lr']
                 print('Starting epoch {}/{},  learning_rate={}'.format(n_epoch + 1, args.epochs, current_learning_rate))
-
+                
                 # train
-                (loss_train, acc_train) = run_epoch(train=True, data_loader=train_loader, model=model,
-                                                    criterion=train_loss_fn, optimizer=optimizer, n_epoch=n_epoch,
-                                                    args=args, device=device)
+                (loss_train, acc_train) = run_epoch(train=True, data_loader=train_loader, model=model, criterion=train_loss_fn, optimizer=optimizer, n_epoch=n_epoch, args=args, device=device)
+        
                 # validate
-                (loss_val, acc_val) = run_epoch(train=False, data_loader=val_loader, model=model, criterion=criterion,
-                                                optimizer=None, n_epoch=n_epoch, args=args, device=device)
+                (loss_val, acc_val) = run_epoch(train=False, data_loader=val_loader, model=model, criterion=criterion, optimizer=None, n_epoch=n_epoch, args=args, device=device)
                 if (acc_val_max is None) or (acc_val > acc_val_max):
                     acc_val_max = acc_val
                     acc_val_argmax = n_epoch
-                    torch.save({"model_state_dict": model.state_dict()},
-                               pathout + '/' + 'checkpoint_epoch{:>04d}_{:.2f}.pth'.format(n_epoch + 1,
-                                                                                           100.0 * acc_val_max))
-
+                    torch.save({"model_state_dict": model.state_dict()}, pathout + '/' + 'checkpoint_epoch{:>04d}_{:.2f}.pth'.format(n_epoch + 1,100.0 * acc_val_max))
+        
                 # adjust learning rate
                 scheduler.step()
-
+        
                 # save the model weights
-                # torch.save({"model_state_dict": model.state_dict()}, 'checkpoint_epoch{:>04d}.pth'.format(n_epoch + 1))
-
+                #torch.save({"model_state_dict": model.state_dict()}, 'checkpoint_epoch{:>04d}.pth'.format(n_epoch + 1))
+                
                 # print epoch summary
-                line = 'Epoch {}/{} summary:  loss_train={:.5f},  acc_train={:.2f}%,  loss_val={:.2f},  acc_val={:.2f}% (best: {:.2f}% @ epoch {})'.format(
-                    n_epoch + 1, args.epochs, loss_train, 100.0 * acc_train, loss_val, 100.0 * acc_val,
-                    100.0 * acc_val_max, acc_val_argmax + 1)
+                line = 'Epoch {}/{} summary:  loss_train={:.5f},  acc_train={:.2f}%,  loss_val={:.2f},  acc_val={:.2f}% (best: {:.2f}% @ epoch {})'.format(n_epoch + 1, args.epochs, loss_train, 100.0 * acc_train, loss_val, 100.0 * acc_val, 100.0 * acc_val_max, acc_val_argmax + 1)
                 print('=' * len(line))
                 print(line)
                 print('=' * len(line))
-                wA.writeLogAcc(filenameLOG, line)
-
+                wA.writeLogAcc(filenameLOG,line)
 
 if __name__ == '__main__':
     try:
