@@ -32,11 +32,12 @@ from models.SSFNet import *
 import writeLogAcc as wA
 from models.cross_entropy import LabelSmoothingCrossEntropy
 
-from ptflops import get_model_complexity_info
+#from ptflops import get_model_complexity_info
 
 path_ReIN = '../../datasets/ImageNet_Rescaled_Subsets'
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
+#parser.add_argument('-r', '--data', type=str, default='../../datasets/ImageNet', help='path to dataset')
 parser.add_argument('-r', '--data', type=str, default='', help='path to dataset')
 parser.add_argument('-j', '--workers', default=16, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
@@ -44,6 +45,7 @@ parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
+#parser.add_argument('-b', '--batch-size', default=256, type=int,
 parser.add_argument('-b', '--batch-size', default=128, type=int,
                     metavar='N', help='mini-batch size (default: 256)')
 parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
@@ -106,12 +108,13 @@ def main():
     # create model
     #arr_typesize = ['small','large']
     #arr_rescaled_set = [30,50,100,150,200]
-    arr_rescaled_set = [30,50,100]
+    #arr_rescaled_set = [30,50,100]
+    arr_rescaled_set = [100]
     for rescaled_set in arr_rescaled_set:
         args.data = path_ReIN + '/ReIN' + str(rescaled_set)
         #for typesize in arr_typesize:
         
-        args.arch = 'removeinit_ReIN' + str(rescaled_set) + '_SSFNet_final_' + '_No_ColorJitter_SE_128_multiGPU'  
+        args.arch = 'ReIN' + str(rescaled_set) + '_SSFNet_' + '_No_ColorJitter_SE_128_multiGPU'  
         #pathout = './checkpoints/' + strmode
         directory = "checkpoints/%s/"%(args.arch + '_' + args.action)
         if not os.path.exists(directory):
@@ -135,29 +138,7 @@ def main():
         
         # get the number of models parameters
         print('Number of models parameters: {}'.format(
-            sum([p.data.nelement() for p in model.parameters()])))
-
-        file_log_model = directory + '_modelLog.txt'
-        with open(file_log_model, 'w') as f:
-            f.write(str(model))
-            f.write('\n')
-            f.write('Number of model parameters: {}'.format(
-            sum([p.data.nelement() for p in model.parameters()])))
-            f.write('\n')
-        
-            macs, params = get_model_complexity_info(model, (3, 224, 224), as_strings=True,
-                                            print_per_layer_stat=True, verbose=True, flops_units='GMac',
-                                            param_units='M')
-            # print_per_layer_stat=True, verbose=True,param_units='M')
-
-            # , flops_units='GMac')
-            macs1 = macs.split()
-            strmacs1 = str(float(macs1[0]) / 2) + ' ' + macs1[1][0]
-            
-            f.write('{:<30}  {:<8}'.format('Floating-point operations (FLOPs): ', strmacs1))
-            f.write('\n')
-            f.write('{:<30}  {:<8}'.format('Number of parameters using ptflops: ', params))
-            f.write('\n')
+            sum([p.data.nelement() for p in model.parameters()])))        
     
         # define loss function (criterion) and optimizer
         train_loss_fn = LabelSmoothingCrossEntropy(smoothing=0.1).cuda(args.gpu)
@@ -168,7 +149,8 @@ def main():
     
         # optionally resume from a checkpoint
         if args.evaluate:
-            pathcheckpoint = "./checkpoints/%s/"%(args.arch + '_' + args.action) + "model_best.pth.tar"
+            #pathcheckpoint = "./checkpoints/%s/"%(args.arch + '_' + args.action) + "model_best.pth.tar"
+            pathcheckpoint = "./checkpoints/ReIN100/model_best.pth.tar"
             if os.path.isfile(pathcheckpoint):
                 print("=> loading checkpoint '{}'".format(pathcheckpoint))
                 checkpoint = torch.load(pathcheckpoint)
@@ -211,6 +193,16 @@ def main():
                 normalize,
             ])
             )
+        # train_dataset = datasets.ImageFolder(
+        #     traindir,
+        #     transforms.Compose([
+        #         transforms.Resize(size=(256, 256)),
+        #         transforms.RandomCrop(224),
+        #         transforms.RandomHorizontalFlip(),
+        #         transforms.ColorJitter(0.4),
+        #         transforms.ToTensor(),
+        #         normalize
+        #     ]))
     
         if args.distributed:
             train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
@@ -229,7 +221,16 @@ def main():
                 normalize,
             ])),
             batch_size=args.batch_size, shuffle=False,
-            num_workers=args.workers, pin_memory=True)  
+            num_workers=args.workers, pin_memory=True)
+        # val_loader = torch.utils.data.DataLoader(
+        #     datasets.ImageFolder(valdir, transforms.Compose([
+        #         transforms.Resize(size=(256, 256)),
+        #         transforms.CenterCrop(224),
+        #         transforms.ToTensor(),
+        #         normalize
+        #     ])),
+        #     batch_size=args.batch_size, shuffle=False,
+        #     num_workers=args.workers, pin_memory=True)        
         if args.evaluate:
             m = time.time()
             _, _ =validate(val_loader, model, criterion)
@@ -251,8 +252,7 @@ def main():
             adjust_learning_rate(optimizer, epoch)
     
             # train for one epoch
-            # train(train_loader, model, criterion, optimizer, epoch)
-            #loss_temp, train_prec1_temp, train_prec5_temp = train(train_loader, model, criterion, optimizer, epoch)
+            # train(train_loader, model, criterion, optimizer, epoch)            
             loss_temp, train_prec1_temp, train_prec5_temp = train(train_loader, model, train_loss_fn, optimizer, epoch)
             
             Loss_plot[epoch] = loss_temp
@@ -276,7 +276,7 @@ def main():
                 'optimizer' : optimizer.state_dict(),
             }, is_best)
             
-
+            # 将Loss,train_prec1,train_prec5,val_prec1,val_prec5用.txt的文件存起来
             data_save(directory + 'Loss_plot.txt', Loss_plot)
             data_save(directory + 'train_prec1.txt', train_prec1_plot)
             data_save(directory + 'train_prec5.txt', train_prec5_plot)
